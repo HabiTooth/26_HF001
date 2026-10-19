@@ -1,22 +1,20 @@
 package com.habitooth.backend.domain.llm.client;
 
-import com.habitooth.backend.domain.llm.dto.LlmIssueInput;
-import com.habitooth.backend.domain.llm.dto.LlmPrevIssueInput;
+import com.habitooth.backend.domain.llm.dto.LlmReportRequestInput;
 import com.habitooth.backend.domain.llm.dto.LlmReportResult;
-import com.habitooth.backend.domain.llm.dto.LlmZoneInput;
-
-import java.util.List;
 
 public interface LlmReportClient {
 
     /**
-     * @param zones     구역별 최신 SUCCESS 분석 결과
-     * @param teeth     구역들에서 검출된 치아 단위 병변
-     * @param prevTeeth 직전 완료 세션의 치아 병변. 이전 세션 없으면 null
+     * @param input 요청 1건의 입력 전체(점수·구역·치아·직전 세션). 필드 추가는 입력 DTO 에서만 한다.
      */
-    LlmReportResult generateReport(
-            List<LlmZoneInput> zones,
-            List<LlmIssueInput> teeth,
-            List<LlmPrevIssueInput> prevTeeth
-    );
+    LlmReportResult generateReport(LlmReportRequestInput input);
+
+    /**
+     * 실제 전송되는 요청 본문 JSON.
+     *
+     * <p>{@link #generateReport} 가 보내는 것과 같은 변환·직렬화를 거치므로, 호출이 실패해도
+     * "보낸 그대로"를 {@code llm_report_log.request_json} 에 남길 수 있다.
+     */
+    String toRequestJson(LlmReportRequestInput input);
 }

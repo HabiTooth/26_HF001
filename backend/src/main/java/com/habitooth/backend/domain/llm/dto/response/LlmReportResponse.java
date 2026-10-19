@@ -1,6 +1,7 @@
 package com.habitooth.backend.domain.llm.dto.response;
 
 import com.habitooth.backend.domain.common.type.RiskLevel;
+import com.habitooth.backend.domain.llm.dto.LlmReportPayload;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -23,6 +24,29 @@ public class LlmReportResponse {
 
     @Schema(description = "면책 문구")
     private String disclaimer;
+
+    // ---------------------------------------------------------------------
+    // v2 확장 필드. llm_report.report_json 에서 복원한다.
+    // report_json 이 없는 구버전 행은 전부 null 로 내려간다 — 위 세 필드는 그대로 채워진다.
+    // ---------------------------------------------------------------------
+
+    @Schema(description = "점수 분해(v2). 구버전 리포트는 null", nullable = true)
+    private LlmReportPayload.Score score;
+
+    @Schema(description = "해설 문장 목록(v2). 구버전 리포트는 null", nullable = true)
+    private List<String> interpretation;
+
+    @Schema(description = "해설 생성 출처(v2). 예: llm / template", example = "llm", nullable = true)
+    private String interpretationSource;
+
+    @Schema(description = "권장 행동 목록(v2). 구버전 리포트는 null", nullable = true)
+    private List<LlmReportPayload.Action> actions;
+
+    @Schema(description = "안내 문구(v2). 서버가 보냈을 때만 존재", nullable = true)
+    private String notice;
+
+    @Schema(description = "LLM 서버 산식 버전(v2)", example = "2026-10-17-score-v2.8", nullable = true)
+    private String logicVersion;
 
     @Getter
     @Builder

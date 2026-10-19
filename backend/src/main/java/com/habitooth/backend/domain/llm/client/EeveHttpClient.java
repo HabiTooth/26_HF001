@@ -1,17 +1,22 @@
 package com.habitooth.backend.domain.llm.client;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.habitooth.backend.domain.common.type.RiskLevel;
 import com.habitooth.backend.domain.llm.dto.LlmIssueInput;
 import com.habitooth.backend.domain.llm.dto.LlmPrevIssueInput;
+import com.habitooth.backend.domain.llm.dto.LlmReportRequestInput;
 import com.habitooth.backend.domain.llm.dto.LlmReportResult;
 import com.habitooth.backend.domain.llm.dto.LlmZoneInput;
 import com.habitooth.backend.domain.llm.dto.eeve.EeveIssue;
 import com.habitooth.backend.domain.llm.dto.eeve.EeveManagementItem;
+import com.habitooth.backend.domain.llm.dto.eeve.EevePrevIssue;
 import com.habitooth.backend.domain.llm.dto.eeve.EeveReportRequest;
-import com.habitooth.backend.domain.llm.dto.eeve.EeveZone;
 import com.habitooth.backend.domain.llm.dto.eeve.EeveReportResponse;
 import com.habitooth.backend.domain.llm.dto.eeve.EeveReportResult;
 import com.habitooth.backend.domain.llm.dto.eeve.EeveRiskDetailItem;
+import com.habitooth.backend.domain.llm.dto.eeve.EeveZone;
 import com.habitooth.backend.global.error.ErrorCode;
 import com.habitooth.backend.global.error.handler.LlmReportHandler;
 import lombok.extern.slf4j.Slf4j;
@@ -30,28 +35,24 @@ import java.util.function.Supplier;
 public class EeveHttpClient implements LlmReportClient {
 
     private final WebClient llmWebClient;
+    private final ObjectMapper objectMapper;
 
-    public EeveHttpClient(@Qualifier("llmWebClient") WebClient llmWebClient) {
+    public EeveHttpClient(@Qualifier("llmWebClient") WebClient llmWebClient, ObjectMapper objectMapper) {
         this.llmWebClient = llmWebClient;
+        this.objectMapper = objectMapper;
     }
 
     @Override
-    public LlmReportResult generateReport(
-            List<LlmZoneInput> zones,
-            List<LlmIssueInput> teeth,
-            List<LlmPrevIssueInput> prevTeeth
-    ) {
-        EeveReportRequest request = EeveReportRequest.builder()
-                .zones(convertZones(zones))
-                .teeth(convertTeeth(teeth))
-                .prevTeeth(convertPrevTeeth(prevTeeth))
-                .build();
+    public LlmReportResult generateReport(LlmReportRequestInput input) {
+        // 직렬화한 문자열을 그대로 바디로 보낸다. toRequestJson 과 같은 경로를 타므로
+        // 로그에 남는 request_json 과 실제 전송 바이트가 어긋날 수 없다.
+        String body = toRequestJson(input);
 
         EeveReportResponse response = callEeve(
                 () -> llmWebClient.post()
                         .uri("/api/llm/report/generate")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .bodyValue(request)
+                        .bodyValue(body)
                         .retrieve()
                         .bodyToMono(EeveReportResponse.class)
                         .block(),
@@ -62,11 +63,35 @@ public class EeveHttpClient implements LlmReportClient {
             throw new LlmReportHandler(ErrorCode.LLM_REPORT_GENERATION_FAILED);
         }
 
-        if (response.getResult() == null) {
+        JsonNode result = response.getResult();
+        if (result == null || result.isNull()) {
             throw new LlmReportHandler(ErrorCode.LLM_REPORT_RESULT_EMPTY);
         }
 
-        return convertToResult(response.getResult());
+        return convertToResult(result);
+    }
+
+    @Override
+    public String toRequestJson(LlmReportRequestInput input) {
+        try {
+            return objectMapper.writeValueAsString(convertRequest(input));
+        } catch (JsonProcessingException e) {
+            log.error("EEVE 요청 직렬화 실패", e);
+            throw new LlmReportHandler(ErrorCode.LLM_REPORT_GENERATION_FAILED);
+        }
+    }
+
+    private EeveReportRequest convertRequest(LlmReportRequestInput input) {
+        return EeveReportRequest.builder()
+                .totalScore(input.getTotalScore())
+                .prevTotalScore(input.getPrevTotalScore())
+                .capturedZoneCount(input.getCapturedZoneCount())
+                .totalZoneCount(input.getTotalZoneCount())
+                .zones(convertZones(input.getZones()))
+                .teeth(convertTeeth(input.getTeeth()))
+                .prevZones(convertZones(input.getPrevZones()))
+                .prevTeeth(convertPrevTeeth(input.getPrevTeeth()))
+                .build();
     }
 
     private List<EeveZone> convertZones(List<LlmZoneInput> zones) {
@@ -77,6 +102,7 @@ public class EeveHttpClient implements LlmReportClient {
         return zones.stream()
                 .map(z -> EeveZone.builder()
                         .viewType(z.getViewType() == null ? null : z.getViewType().name())
+                        .lightType(z.getLightType() == null ? null : z.getLightType().name())
                         .zoneScore(z.getZoneScore())
                         .zoneValid(z.getZoneValid())
                         .detectedToothCount(z.getDetectedToothCount())
@@ -87,6 +113,10 @@ public class EeveHttpClient implements LlmReportClient {
     }
 
     private List<EeveIssue> convertTeeth(List<LlmIssueInput> teeth) {
+        if (teeth == null) {
+            return null;
+        }
+
         return teeth.stream()
                 .map(t -> EeveIssue.builder()
                         .toothNumber(t.getToothNumber())
@@ -98,33 +128,52 @@ public class EeveHttpClient implements LlmReportClient {
                 .toList();
     }
 
-    private List<List<Object>> convertPrevTeeth(List<LlmPrevIssueInput> prevTeeth) {
+    private List<EevePrevIssue> convertPrevTeeth(List<LlmPrevIssueInput> prevTeeth) {
         if (prevTeeth == null) {
             return null;
         }
 
         return prevTeeth.stream()
-                .map(p -> List.<Object>of(p.getToothNumber(), p.getLesionType().name()))
+                .map(p -> EevePrevIssue.builder()
+                        .toothNumber(p.getToothNumber())
+                        .lesionType(p.getLesionType().name())
+                        .areaRatio(p.getAreaRatio())
+                        .build())
                 .toList();
     }
 
-    private LlmReportResult convertToResult(EeveReportResult result) {
-        List<LlmReportResult.RiskDetailItem> riskDetail = result.getRiskDetail() == null
+    /**
+     * result 트리 → 내부 결과 DTO.
+     *
+     * <p>기존 세 필드는 전용 타입으로 매핑하고, v2 확장 필드는 원문 문자열로 함께 들고 나간다.
+     * 서버가 필드를 더 붙여도 Spring 변경 없이 {@code report_json} 에 저장된다.
+     */
+    private LlmReportResult convertToResult(JsonNode result) {
+        EeveReportResult typed;
+        try {
+            typed = objectMapper.treeToValue(result, EeveReportResult.class);
+        } catch (JsonProcessingException e) {
+            log.error("EEVE result 매핑 실패. result={}", result, e);
+            throw new LlmReportHandler(ErrorCode.LLM_SERVER_RESPONSE_ERROR);
+        }
+
+        List<LlmReportResult.RiskDetailItem> riskDetail = typed.getRiskDetail() == null
                 ? List.of()
-                : result.getRiskDetail().stream()
+                : typed.getRiskDetail().stream()
                         .map(this::convertRiskDetailItem)
                         .toList();
 
-        List<LlmReportResult.ManagementItem> management = result.getManagement() == null
+        List<LlmReportResult.ManagementItem> management = typed.getManagement() == null
                 ? List.of()
-                : result.getManagement().stream()
+                : typed.getManagement().stream()
                         .map(this::convertManagementItem)
                         .toList();
 
         return LlmReportResult.builder()
                 .riskDetail(riskDetail)
                 .management(management)
-                .disclaimer(result.getDisclaimer())
+                .disclaimer(typed.getDisclaimer())
+                .rawResultJson(result.toString())
                 .build();
     }
 
