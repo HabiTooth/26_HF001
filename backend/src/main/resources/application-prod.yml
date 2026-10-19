@@ -1,0 +1,94 @@
+# 운영(prod) 프로파일
+# 비밀값과 환경별 주소는 전부 환경변수로 주입한다. (EC2: /etc/habitooth/backend.env)
+server:
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/plain
+    min-response-size: 1024
+  tomcat:
+    connection-timeout: 5000
+    threads:
+      max: 100
+  http2:
+    enabled: true
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 3000
+      max-lifetime: 1740000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+        show_sql: false
+        default_batch_fetch_size: 100
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+# JWT 생성용 비밀키와 만료 시간 설정
+jwt:
+  secret: ${JWT_SECRET}
+  expiration_time: ${JWT_EXPIRATION_MS:36000000}
+
+# SNS 로그인
+oauth:
+  kakao:
+    client-id: ${KAKAO_CLIENT_ID}
+    client-secret: ${KAKAO_CLIENT_SECRET}
+  google:
+    client-id: ${GOOGLE_CLIENT_ID}
+    client-secret: ${GOOGLE_CLIENT_SECRET}
+
+# AI(FastAPI) 서버 주소 설정
+ai:
+  server:
+    base-url: ${AI_SERVER_BASE_URL}
+    connect-timeout-ms: 30000
+    read-timeout-ms: 120000
+    include-overlay: ${AI_INCLUDE_OVERLAY:true}       # report/generate 에 결과 오버레이 PNG 요청
+    max-in-memory-size-mb: ${AI_MAX_IN_MEMORY_MB:16}  # 오버레이 PNG(base64)가 실리는 JSON 응답의 버퍼 상한
+
+# 이미지 저장소
+#   FILE_STORAGE=local : EC2 디스크(FILE_UPLOAD_DIR). 기본값.
+#   FILE_STORAGE=s3    : S3 버킷. EC2 인스턴스 역할로 인증하고 presigned URL 로만 내려준다.
+#                        사진·오버레이는 개인정보이므로 버킷에 N일 후 삭제하는 수명 주기 규칙을 둘 것.
+file:
+  storage: ${FILE_STORAGE:local}
+  upload-dir: ${FILE_UPLOAD_DIR:/opt/habitooth/uploads}
+  s3:
+    bucket: ${S3_BUCKET:}
+    region: ${AWS_REGION:ap-northeast-2}
+    key-prefix: ${S3_KEY_PREFIX:}
+    presign-ttl-seconds: ${S3_PRESIGN_TTL_SECONDS:300}
+
+# LLM(EEVE) 서버 주소 설정
+llm:
+  server:
+    base-url: ${LLM_SERVER_BASE_URL}
+    connect-timeout-ms: 30000
+    read-timeout-ms: 600000            # 10분 — 4비트 + 재시도 감안
+
+# 로깅 (stdout → systemd journal, journalctl -u habitooth-backend 로 확인)
+logging:
+  level:
+    root: INFO
+    com.habitooth.backend: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file.encoding: UTF-8

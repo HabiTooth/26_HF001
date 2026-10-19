@@ -1,0 +1,18 @@
+# Generated files and private configuration
+**/node_modules/
+**/.next*/
+**/.gradle/
+**/build/
+**/uploads/
+**/logs/
+**/.env*
+!**/.env*.example
+!**/.env*.sample
+**/application-dev.yml
+**/*.log
+**/*.pem
+**/*.key
+**/*.tsbuildinfo
+**/test-results/
+**/e2e/report/
+**/e2e/.artifacts/

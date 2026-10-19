@@ -1,0 +1,23 @@
+# EC2: /etc/systemd/system/habitooth-backend.service
+#   sudo cp habitooth-backend.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable habitooth-backend
+
+[Unit]
+Description=Habitooth Backend (Spring Boot)
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/habitooth
+EnvironmentFile=/etc/habitooth/backend.env
+Environment=SPRING_PROFILES_ACTIVE=prod
+# 서비스 기준 시간대는 한국. EC2 OS 기본값(UTC)을 그대로 쓰면 DB 저장 시각이 9시간 밀린다.
+# 애플리케이션(BackendApplication)도 같은 값을 강제하지만, JVM 옵션으로도 고정해 둔다.
+Environment=TZ=Asia/Seoul
+ExecStart=/usr/bin/java -Duser.timezone=Asia/Seoul -Xms256m -Xmx512m -jar /opt/habitooth/backend.jar
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

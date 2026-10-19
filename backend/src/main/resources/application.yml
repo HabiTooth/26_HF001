@@ -1,0 +1,12 @@
+server:
+  compression:
+    enabled: true   # 3D 좌표 응답처럼 큰 JSON 전송량 절감 (프로필 공통)
+
+spring:
+  application:
+    name: backend
+
+  jackson:
+    time-zone: Asia/Seoul   # Instant/Date 직렬화 기준.
+  profiles:
+    active: dev

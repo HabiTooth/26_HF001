@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN tooth_profile_set_at DATETIME NULL;
